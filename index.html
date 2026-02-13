@@ -7,52 +7,84 @@
     <title>WhatsApp Business</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
     <style>
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 10px;
-        }
-        body {
-            background-color: #dadbd3;
-            height: 100vh;
-            overflow: hidden;
-            font-family: Segoe UI, Helvetica Neue, Helvetica, Lucida Grande, Arial, Ubuntu, Cantarell, Fira Sans, sans-serif;
-        }
-        #root {
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .whatsapp-bg {
-            background-color: #efeae2;
-            background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
-            background-repeat: repeat;
-            opacity: 0.9;
-        }
-        .msg-shadow {
-            box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
-        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); border-radius: 10px; }
+        body { background-color: #dadbd3; height: 100vh; overflow: hidden; font-family: Segoe UI, Helvetica Neue, Helvetica, Arial, sans-serif; }
+        #root { height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .whatsapp-bg { background-color: #efeae2; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); opacity: 0.9; }
+        .msg-shadow { box-shadow: 0 1px 0.5px rgba(0,0,0,0.13); }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
-    "react": "https://esm.sh/react@^19.2.4",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "qrcode": "https://esm.sh/qrcode@^1.5.3"
-  }
-}
-</script>
+
+    <script>
+        window.process = { env: { API_KEY: "" } };
+        
+        async function loadConfig() {
+            const statusEl = document.getElementById('loading-status');
+            const retries = 30; // 30 tentativas * 3s = 90 segundos (Cobre o cold start do Render)
+            
+            console.log("Iniciando carregamento de configuração...");
+            
+            for (let i = 0; i < retries; i++) {
+                try {
+                    if (statusEl) statusEl.innerText = `Acordando servidor... (${i + 1}/${retries})`;
+                    
+                    const res = await fetch('/api/config');
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    
+                    const config = await res.json();
+                    window.process.env.API_KEY = config.API_KEY;
+                    
+                    console.log("Configurações carregadas!");
+                    window.dispatchEvent(new Event('config-loaded'));
+                    return;
+                } catch (e) {
+                    console.warn(`Tentativa ${i+1} falhou. Aguardando...`);
+                    await new Promise(r => setTimeout(r, 3000));
+                }
+            }
+            
+            if (statusEl) {
+                statusEl.innerHTML = `
+                    <div class="text-red-600 font-bold">Erro: Servidor não responde.</div>
+                    <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-[#922c26] text-white rounded">Tentar Novamente</button>
+                `;
+            }
+        }
+        
+        window.addEventListener('DOMContentLoaded', loadConfig);
+    </script>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
+        "react": "https://esm.sh/react@^19.2.4",
+        "react/": "https://esm.sh/react@^19.2.4/",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+        "qrcode": "https://esm.sh/qrcode@^1.5.3"
+      }
+    }
+    </script>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div class="flex flex-col items-center">
+            <i class="fab fa-whatsapp text-6xl text-[#922c26] mb-4 animate-pulse"></i>
+            <p id="loading-status" class="text-gray-500 font-medium text-center">Inicializando interface...</p>
+        </div>
+    </div>
+    <script type="text/babel" data-type="module">
+        window.addEventListener('config-loaded', () => {
+            const script = document.createElement('script');
+            script.type = 'text/babel';
+            script.dataset.type = 'module';
+            script.src = 'index.tsx';
+            document.body.appendChild(script);
+        });
+    </script>
 </body>
 </html>

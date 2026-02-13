@@ -16,4 +16,4 @@ services:
       - key: PUPPETEER_CACHE_DIR
         value: "/opt/render/project/src/.cache/puppeteer"
       - key: PUPPETEER_EXECUTABLE_PATH
-        value: "/opt/render/project/src/.cache/puppeteer/chrome/linux-116.0.5845.96/chrome-linux/chrome"
+        value: "/opt/render/project/src/.cache/stable/chrome"

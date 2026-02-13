@@ -2,17 +2,30 @@
 import { GoogleGenAI, Chat } from "@google/genai";
 
 export class GeminiService {
-  private ai: GoogleGenAI;
+  private ai: GoogleGenAI | null = null;
   private chatSession: Chat | null = null;
 
-  constructor() {
-    // API key must be used directly from process.env.API_KEY as per guidelines
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  private getAI() {
+    if (!this.ai) {
+      // Prioriza a chave do window (injetada pelo index.html) ou process.env
+      const apiKey = (window as any).process?.env?.API_KEY || process.env.API_KEY;
+      
+      if (!apiKey) {
+        console.error("GeminiService: API_KEY não encontrada!");
+        return null;
+      }
+      
+      this.ai = new GoogleGenAI({ apiKey });
+    }
+    return this.ai;
   }
 
   private initChat() {
+    const ai = this.getAI();
+    if (!ai) return null;
+
     if (!this.chatSession) {
-      this.chatSession = this.ai.chats.create({
+      this.chatSession = ai.chats.create({
         model: 'gemini-3-flash-preview',
         config: {
           systemInstruction: `Você é um assistente virtual de triagem ágil e cordial em um chat do WhatsApp. 
@@ -29,7 +42,6 @@ export class GeminiService {
           - Seja conciso e use emojis.
           - Pergunte educadamente com qual deles o usuário deseja conversar.
           - Se o usuário escolher um nome da lista, confirme a escolha e diga que está "transferindo o atendimento".
-          - Se o usuário enviar uma imagem, analise-a e depois lembre-o de escolher um atendente caso ainda não tenha feito.
           - Mantenha o tom profissional mas amigável.`,
         },
       });
@@ -39,26 +51,30 @@ export class GeminiService {
 
   async sendMessage(message: string, attachment?: { data: string, mimeType: string }): Promise<string> {
     try {
+      const ai = this.getAI();
+      if (!ai) return "Erro: Chave de API não configurada.";
+
       const chat = this.initChat();
+      if (!chat) return "Erro ao inicializar chat.";
       
       if (attachment && attachment.mimeType.startsWith('image/')) {
-        const response = await this.ai.models.generateContent({
+        const response = await ai.models.generateContent({
           model: 'gemini-3-flash-preview',
           contents: {
             parts: [
-              { text: message || "Analise esta imagem e depois me apresente a lista de atendentes para eu escolher." },
+              { text: message || "Analise esta imagem." },
               { inlineData: { data: attachment.data, mimeType: attachment.mimeType } }
             ]
           }
         });
-        return response.text || "Recebi sua imagem. Com qual de nossos atendentes você deseja falar? (Patricia, Nathan, Maria Fernanda ou João Victor)";
+        return response.text || "Recebi sua imagem.";
       }
 
       const response = await chat.sendMessage({ message: message || "Olá" });
       return response.text || "Desculpe, não consegui processar sua mensagem.";
     } catch (error) {
       console.error("Gemini API Error:", error);
-      return "Houve um erro ao conectar com o servidor. Tente novamente mais tarde.";
+      return "Erro na comunicação com a IA. Verifique se a sua API_KEY é válida.";
     }
   }
 }
