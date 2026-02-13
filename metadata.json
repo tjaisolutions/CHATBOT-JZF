@@ -1,0 +1,8 @@
+{
+  "name": "Gemini WhatsApp Chatbot",
+  "description": "A high-fidelity WhatsApp-style chatbot interface using the Gemini API for intelligent conversations.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
