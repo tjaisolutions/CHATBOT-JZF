@@ -1,6 +1,5 @@
-
 /**
- * BACKEND UNIFICADO - COM INICIALIZAÇÃO OTIMIZADA PARA RENDER
+ * BACKEND UNIFICADO - COM DETECÇÃO DINÂMICA DE BROWSER (FIX RENDER BUILD)
  */
 
 const { Client, LocalAuth } = require('whatsapp-web.js');
@@ -8,12 +7,13 @@ const { WebSocketServer } = require('ws');
 const express = require('express');
 const http = require('http');
 const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3001;
 const server = http.createServer(app);
 
-// 1. ENDPOINT DE CONFIGURAÇÃO (Deve responder o mais rápido possível)
+// 1. ENDPOINT DE CONFIGURAÇÃO
 app.get('/api/config', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.json({
@@ -29,20 +29,24 @@ const wss = new WebSocketServer({ server });
 server.listen(port, () => {
     console.log(`[HTTP] Servidor ouvindo na porta ${port}`);
     console.log(`[HTTP] Endpoint de configuração pronto em /api/config`);
-    
-    // Inicia o motor do WhatsApp APÓS o servidor estar online
     initWhatsApp();
 });
 
 function getChromiumExecutablePath() {
+    // Lista de caminhos possíveis (Relativos ao root do projeto e absolutos do sistema)
     const paths = [
         process.env.PUPPETEER_EXECUTABLE_PATH,
-        '/opt/render/project/src/.cache/stable/chrome',
+        path.join(process.cwd(), '.chrome_stable/chrome'),
+        path.join(process.cwd(), '.puppeteer_cache/chrome'),
         '/usr/bin/google-chrome',
         '/usr/bin/chromium-browser'
     ];
+
     for (const p of paths) {
-        if (p && fs.existsSync(p)) return p;
+        if (p && fs.existsSync(p)) {
+            console.log(`[BROWSER] Verificado e encontrado em: ${p}`);
+            return p;
+        }
     }
     return null;
 }
@@ -65,7 +69,8 @@ function initWhatsApp() {
     const chromePath = getChromiumExecutablePath();
     if (chromePath) {
         puppeteerOptions.executablePath = chromePath;
-        console.log(`[WPP] Usando Chrome em: ${chromePath}`);
+    } else {
+        console.warn("[WPP] Aviso: Nenhum executável customizado encontrado. Tentando padrão do sistema.");
     }
 
     const client = new Client({
@@ -78,8 +83,16 @@ function initWhatsApp() {
             if (ws.readyState === 1) ws.send(JSON.stringify({ type, payload }));
         };
 
-        client.on('qr', (qr) => sendToFrontend('qr', qr));
-        client.on('ready', () => sendToFrontend('authenticated', true));
+        client.on('qr', (qr) => {
+            console.log('[WPP] Novo QR Code gerado');
+            sendToFrontend('qr', qr);
+        });
+
+        client.on('ready', () => {
+            console.log('[WPP] Cliente está pronto!');
+            sendToFrontend('authenticated', true);
+        });
+
         client.on('message', async (msg) => {
             sendToFrontend('message', {
                 id: msg.id.id,

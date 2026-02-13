@@ -1,30 +1,33 @@
-
 #!/usr/bin/env bash
 # exit on error
 set -o errexit
 
-echo "--- INICIANDO BUILD ---"
+echo "--- INICIANDO BUILD CUSTOMIZADO ---"
 
 # Instala as dependências do projeto
 npm install
 
-# Baixa o Chromium para o diretório de cache local do projeto
-echo "Instalando Chromium via Puppeteer..."
+# Define o diretório de cache do puppeteer como uma pasta local no projeto
+export PUPPETEER_CACHE_DIR="$(pwd)/.puppeteer_cache"
+mkdir -p "$PUPPETEER_CACHE_DIR"
+
+echo "Instalando Chromium no diretório: $PUPPETEER_CACHE_DIR"
 npx puppeteer install
 
-# Encontra o executável do Chrome e cria um link simbólico estável
-echo "Verificando local de instalação do Chromium..."
-CHROME_BIN=$(find /opt/render/project/src/.cache/puppeteer -name chrome -type f | head -n 1)
+# Encontra o executável do Chrome de forma dinâmica no diretório de cache recém-criado
+echo "Localizando binário do Chromium..."
+CHROME_BIN=$(find "$PUPPETEER_CACHE_DIR" -name chrome -type f | head -n 1)
 
 if [ -z "$CHROME_BIN" ]; then
-    echo "ERRO: Binário do Chromium não encontrado após a instalação!"
+    echo "ERRO: Binário do Chromium não encontrado em $PUPPETEER_CACHE_DIR"
     exit 1
 else
     echo "Chromium encontrado em: $CHROME_BIN"
 fi
 
-mkdir -p /opt/render/project/src/.cache/stable
-ln -sf "$CHROME_BIN" /opt/render/project/src/.cache/stable/chrome
-echo "Link simbólico criado em: /opt/render/project/src/.cache/stable/chrome"
+# Cria um link simbólico estável para o servidor Node encontrar facilmente
+mkdir -p "$(pwd)/.chrome_stable"
+ln -sf "$CHROME_BIN" "$(pwd)/.chrome_stable/chrome"
 
+echo "Link simbólico criado em: $(pwd)/.chrome_stable/chrome"
 echo "--- BUILD FINALIZADO COM SUCESSO ---"
