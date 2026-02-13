@@ -1,0 +1,19 @@
+
+services:
+  - type: web
+    name: whatsapp-gemini-bot
+    env: node
+    plan: free
+    buildCommand: bash render-build.sh
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 18.0.0
+      - key: API_KEY
+        sync: false
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: "false"
+      - key: PUPPETEER_CACHE_DIR
+        value: "/opt/render/project/src/.cache/puppeteer"
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: "/opt/render/project/src/.cache/puppeteer/chrome/linux-116.0.5845.96/chrome-linux/chrome"
