@@ -13,9 +13,13 @@ const app = express();
 const port = process.env.PORT || 3001;
 const server = http.createServer(app);
 
-// 1. ENDPOINT DE CONFIGURAÇÃO (Usado pelo frontend para acordar o servidor e pegar a API_KEY)
+// 1. ENDPOINTS DE SAÚDE E CONFIGURAÇÃO
+// O Render precisa que o '/' responda rápido para não dar timeout
+app.get('/', (req, res) => {
+    res.send('WhatsApp Bot Engine is Running');
+});
+
 app.get('/api/config', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
     res.json({
         API_KEY: process.env.API_KEY || ""
     });
@@ -25,37 +29,26 @@ app.use(express.static(__dirname));
 
 const wss = new WebSocketServer({ server });
 
-// 2. INICIA O SERVIDOR
-server.listen(port, () => {
+// 2. INICIA O SERVIDOR HTTP IMEDIATAMENTE
+server.listen(port, "0.0.0.0", () => {
     console.log(`[HTTP] Servidor rodando na porta ${port}`);
-    initWhatsApp();
+    // Inicializa o WhatsApp em background para não bloquear o boot do servidor
+    setTimeout(initWhatsApp, 1000);
 });
 
 function getChromiumExecutablePath() {
-    // Caminho prioritário definido pelo script de build
     const stablePath = path.join(process.cwd(), '.chrome_stable/chrome');
-    
-    if (fs.existsSync(stablePath)) {
-        console.log(`[WPP] Usando binário estável: ${stablePath}`);
-        return stablePath;
-    }
+    if (fs.existsSync(stablePath)) return stablePath;
 
-    // Fallbacks para ambiente local ou outros servidores
     const fallbacks = [
         process.env.PUPPETEER_EXECUTABLE_PATH,
         '/usr/bin/google-chrome',
-        '/usr/bin/chromium-browser',
-        '/usr/bin/chromium'
+        '/usr/bin/chromium-browser'
     ];
 
     for (const p of fallbacks) {
-        if (p && fs.existsSync(p)) {
-            console.log(`[WPP] Usando fallback: ${p}`);
-            return p;
-        }
+        if (p && fs.existsSync(p)) return p;
     }
-
-    console.warn("[WPP] Aviso: Nenhum executável de Chrome/Chromium encontrado nos caminhos conhecidos.");
     return null;
 }
 
@@ -64,20 +57,25 @@ function initWhatsApp() {
     
     const chromePath = getChromiumExecutablePath();
     
+    // Flags cruciais para rodar em ambientes com pouca RAM (Render Free)
     const puppeteerOptions = {
         headless: "new",
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-gpu',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
             '--no-zygote',
-            '--single-process'
+            '--disable-gpu',
+            '--single-process', // Reduz drasticamente o uso de RAM
+            '--disable-extensions'
         ]
     };
 
     if (chromePath) {
         puppeteerOptions.executablePath = chromePath;
+        console.log(`[WPP] Executável: ${chromePath}`);
     }
 
     const client = new Client({
@@ -86,6 +84,8 @@ function initWhatsApp() {
     });
 
     wss.on('connection', (ws) => {
+        console.log('[WS] Cliente UI conectado');
+        
         const sendToFrontend = (type, payload) => {
             if (ws.readyState === 1) ws.send(JSON.stringify({ type, payload }));
         };
@@ -96,14 +96,12 @@ function initWhatsApp() {
         });
 
         client.on('ready', () => {
-            console.log('[WPP] Cliente conectado e pronto!');
+            console.log('[WPP] WhatsApp pronto!');
             sendToFrontend('authenticated', true);
         });
 
         client.on('message', async (msg) => {
-            // Ignorar mensagens de grupo se desejar
             if (msg.from.includes('@g.us')) return;
-
             sendToFrontend('message', {
                 id: msg.id.id,
                 from: msg.from,
@@ -119,12 +117,12 @@ function initWhatsApp() {
                     await client.sendMessage(payload.to, payload.text);
                 }
             } catch (e) { 
-                console.error('[WS] Erro ao processar mensagem:', e.message); 
+                console.error('[WS] Erro:', e.message); 
             }
         });
     });
 
     client.initialize().catch(err => {
-        console.error('[WPP] ERRO CRÍTICO NA INICIALIZAÇÃO:', err.message);
+        console.error('[WPP] FALHA NA INICIALIZAÇÃO:', err.message);
     });
 }

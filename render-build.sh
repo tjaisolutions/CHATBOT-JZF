@@ -2,38 +2,32 @@
 # exit on error
 set -o errexit
 
-echo "--- [BUILD] INICIANDO BUILD OTIMIZADO ---"
+echo "--- [BUILD] INICIANDO INSTALAÇÃO OTIMIZADA ---"
 
-# 1. Configurações de Ambiente
-export PUPPETEER_CACHE_DIR="$(pwd)/.puppeteer_cache"
-export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
-
-# Limpeza profunda inicial
-rm -rf "$PUPPETEER_CACHE_DIR"
+# 1. Limpeza de ambiente para garantir espaço em disco
+rm -rf .puppeteer_cache
 rm -rf .chrome_stable
-mkdir -p "$PUPPETEER_CACHE_DIR"
+mkdir -p .puppeteer_cache
 mkdir -p .chrome_stable
 
-# 2. Instalação rápida
-echo "--- [BUILD] Instalando pacotes (npm install)..."
-npm install --no-audit --no-fund
+# 2. Instalação de dependências sem logs excessivos (economiza memória de log)
+npm install --no-audit --no-fund --quiet
 
-# 3. Instalação do Chrome (Versão específica estável)
-echo "--- [BUILD] Baixando Chromium..."
-npx puppeteer browsers install chrome --path "$PUPPETEER_CACHE_DIR"
+# 3. Instalação do Chrome via Puppeteer (apenas os binários necessários para Linux)
+echo "--- [BUILD] Baixando binários do Chromium..."
+npx puppeteer browsers install chrome --path ./.puppeteer_cache
 
-# 4. Localização precisa
-echo "--- [BUILD] Criando links de execução..."
-# Busca o binário instalado na estrutura de pastas do Puppeteer 22+
-# O caminho costuma ser .puppeteer_cache/chrome/linux-<id>/chrome-linux64/chrome
-CHROME_PATH=$(find "$PUPPETEER_CACHE_DIR" -type f -name "chrome" -executable | head -n 1)
+# 4. Localização e Linkagem do Binário
+# O caminho no Puppeteer 22+ é dinâmico, por isso usamos o find
+CHROME_BIN=$(find ./.puppeteer_cache -type f -name "chrome" -executable | head -n 1)
 
-if [ -z "$CHROME_PATH" ]; then
-    echo "!!! ERRO CRÍTICO: Binário não encontrado após instalação."
+if [ -z "$CHROME_BIN" ]; then
+    echo "!!! ERRO: Binário do Chrome não encontrado."
     exit 1
 fi
 
-ln -sf "$CHROME_PATH" "$(pwd)/.chrome_stable/chrome"
+# Criamos um link fixo que o server.js conhece
+ln -sf "$CHROME_BIN" ./.chrome_stable/chrome
 
-echo "--- [BUILD] Sucesso! Binário em: $CHROME_PATH"
-echo "--- [BUILD] FINALIZADO ---"
+echo "--- [BUILD] Sucesso! Chrome mapeado em ./.chrome_stable/chrome"
+echo "--- [BUILD] Concluído com sucesso ---"

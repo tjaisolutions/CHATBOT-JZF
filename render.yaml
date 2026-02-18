@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: whatsapp-gemini-bot
+    name: chatbot-jzf
     env: node
     plan: free
     buildCommand: bash render-build.sh
@@ -9,7 +9,7 @@ services:
       - key: NODE_VERSION
         value: 20.12.0
       - key: NODE_OPTIONS
-        value: --max-old-space-size=400
+        value: --max-old-space-size=350
       - key: API_KEY
         sync: false
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
