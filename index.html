@@ -31,46 +31,23 @@
         async function loadConfig() {
             console.log("Iniciando busca de configurações...");
             const statusEl = document.getElementById('loading-status');
-            const retries = 50; 
             
-            for (let i = 0; i < retries; i++) {
-                try {
-                    console.log(`Tentativa ${i+1}...`);
-                    if (statusEl) statusEl.innerText = `Acordando servidor... (${i + 1}/${retries})`;
-                    
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 8000);
-                    
-                    const res = await fetch('/api/config', { 
-                        signal: controller.signal,
-                        cache: 'no-store'
-                    });
-                    clearTimeout(timeoutId);
-                    
-                    if (res.ok) {
-                        const config = await res.json();
-                        window.process.env.API_KEY = config.API_KEY;
-                        console.log("Configurações carregadas!");
-                        window.isConfigLoaded = true;
-                        window.dispatchEvent(new Event('config-loaded'));
-                        return;
-                    }
-                } catch (e) {
-                    console.warn(`Tentativa ${i+1} falhou:`, e.message);
+            try {
+                const res = await fetch('/api/config', { cache: 'no-store' });
+                if (res.ok) {
+                    const config = await res.json();
+                    window.process.env.API_KEY = config.API_KEY;
+                    console.log("Configurações carregadas!");
+                    window.isConfigLoaded = true;
+                    window.dispatchEvent(new Event('config-loaded'));
+                    return;
                 }
-                await new Promise(r => setTimeout(r, 2000));
+            } catch (e) {
+                console.warn(`Erro ao carregar config:`, e.message);
             }
             
-            if (statusEl) {
-                statusEl.innerHTML = `
-                    <div class="bg-white p-6 rounded-lg shadow-xl text-center max-w-sm">
-                        <p class="text-gray-800 font-bold mb-2">O servidor está demorando para responder.</p>
-                        <p class="text-xs text-gray-500 mb-4">Isso é comum em contas gratuitas do Render.</p>
-                        <button onclick="window.dispatchEvent(new Event('config-loaded'))" class="w-full bg-[#922c26] text-white py-2 rounded font-bold mb-2">Entrar mesmo assim</button>
-                        <button onclick="location.reload()" class="text-[#922c26] text-xs font-bold uppercase">Tentar reconectar</button>
-                    </div>
-                `;
-            }
+            // Se falhar de primeira, tenta em loop mas sem travar a UI
+            setTimeout(loadConfig, 2000);
         }
         
         window.addEventListener('DOMContentLoaded', loadConfig);
@@ -95,7 +72,7 @@
             <div class="w-64 h-1 bg-gray-200 relative overflow-hidden mb-6 rounded-full">
                <div class="absolute h-full bg-[#922c26] w-1/2" style="animation: loading 2s ease-in-out infinite;"></div>
             </div>
-            <p id="loading-status" class="text-gray-500 font-medium text-center">Iniciando interface...</p>
+            <p id="loading-status" class="text-gray-500 font-medium text-center">Conectando ao servidor...</p>
         </div>
     </div>
     

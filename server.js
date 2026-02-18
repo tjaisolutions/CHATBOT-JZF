@@ -1,148 +1,114 @@
 
 /**
- * BACKEND UNIFICADO - WHATSAPP + GEMINI
- * Otimizado para ambientes de baixa memória (Render Free - 512MB)
+ * BACKEND LEVE - WHATSAPP VIA BAILEYS (SEM CHROME)
+ * Consumo de RAM aproximado: 100MB-150MB
  */
 
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const { WebSocketServer } = require('ws');
+const { 
+    default: makeWASocket, 
+    useMultiFileAuthState, 
+    DisconnectReason,
+    fetchLatestBaileysVersion 
+} = require('@whiskeysockets/baileys');
+const pino = require('pino');
 const express = require('express');
 const http = require('http');
-const fs = require('fs');
 const path = require('path');
+const { WebSocketServer } = require('ws');
 
 const app = express();
 const port = process.env.PORT || 3001;
 const server = http.createServer(app);
-
-// Log de requisições simplificado para não poluir o console
-app.use((req, res, next) => {
-    if (req.url !== '/api/config') console.log(`[HTTP] ${req.method} ${req.url}`);
-    next();
-});
-
-// Endpoint de configuração (Prioridade Máxima)
-app.get('/api/config', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
-    res.json({
-        API_KEY: process.env.API_KEY || ""
-    });
-});
-
-// Servir arquivos estáticos
-app.use(express.static(__dirname));
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
 const wss = new WebSocketServer({ server });
 
-// 2. INICIA O SERVIDOR HTTP
-server.listen(port, "0.0.0.0", () => {
-    console.log(`[HTTP] Servidor ONLINE na porta ${port}`);
-    console.log('[WPP] Aguardando 45 segundos para estabilização de RAM antes de iniciar o Chrome...');
-    // Aumentamos para 45s para garantir que o usuário carregue o site primeiro
-    setTimeout(initWhatsApp, 45000);
+// Configuração básica do Express
+app.get('/api/config', (req, res) => {
+    res.json({ API_KEY: process.env.API_KEY || "" });
 });
 
-function getChromiumExecutablePath() {
-    const projectRoot = process.cwd();
-    const pathsToTry = [
-        path.join(projectRoot, '.chrome_stable', 'chrome'),
-        path.join(projectRoot, '.chrome_stable', 'chrome-linux', 'chrome'),
-        process.env.PUPPETEER_EXECUTABLE_PATH,
-        '/usr/bin/google-chrome',
-        '/usr/bin/chromium-browser'
-    ];
+app.use(express.static(__dirname));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-    for (const p of pathsToTry) {
-        if (p && fs.existsSync(p)) {
-            try {
-                fs.accessSync(p, fs.constants.X_OK);
-                return p;
-            } catch (e) {}
-        }
-    }
-    return null;
-}
-
-function initWhatsApp() {
-    console.log('--- [WPP] INICIALIZANDO ENGINE (MEMÓRIA REDUZIDA) ---');
+// Inicialização do WhatsApp (Baileys)
+async function connectToWhatsApp() {
+    console.log('[WPP] Iniciando conexão via Protocolo (Baileys)...');
     
-    const chromePath = getChromiumExecutablePath();
-    
-    const puppeteerOptions = {
-        headless: "new",
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu',
-            '--single-process', 
-            '--disable-extensions',
-            '--disable-default-apps',
-            '--mute-audio',
-            '--disable-software-rasterizer',
-            '--disable-dev-tools',
-            '--js-flags="--max-old-space-size=256"' // Limita memória interna do V8 no Chrome
-        ]
-    };
+    // Pasta para salvar a sessão e não precisar de QR Code toda hora
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+    const { version } = await fetchLatestBaileysVersion();
 
-    if (chromePath) {
-        puppeteerOptions.executablePath = chromePath;
-    }
+    const sock = makeWASocket({
+        version,
+        auth: state,
+        printQRInTerminal: true,
+        logger: pino({ level: 'silent' }), // Log silencioso para economizar processamento
+        browser: ["Chatbot Gemini", "MacOS", "3.0.0"]
+    });
 
-    try {
-        const client = new Client({
-            authStrategy: new LocalAuth(),
-            puppeteer: puppeteerOptions
-        });
+    // Gerenciamento de WebSockets para o Frontend
+    wss.on('connection', (ws) => {
+        console.log('[WS] Frontend conectado.');
 
-        wss.on('connection', (ws) => {
-            console.log('[WS] Cliente conectado');
+        const sendToFrontend = (type, payload) => {
+            if (ws.readyState === 1) ws.send(JSON.stringify({ type, payload }));
+        };
+
+        // Eventos do Socket do WhatsApp
+        sock.ev.on('connection.update', (update) => {
+            const { connection, lastDisconnect, qr } = update;
             
-            const sendToFrontend = (type, payload) => {
-                if (ws.readyState === 1) ws.send(JSON.stringify({ type, payload }));
-            };
-
-            client.on('qr', (qr) => {
-                console.log('[WPP] Novo QR Code gerado');
+            if (qr) {
+                console.log('[WPP] Novo QR Code disponível.');
                 sendToFrontend('qr', qr);
-            });
+            }
 
-            client.on('ready', () => {
-                console.log('[WPP] Pronto!');
+            if (connection === 'close') {
+                const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+                console.log('[WPP] Conexão fechada. Motivo:', lastDisconnect.error, 'Reconectando:', shouldReconnect);
+                if (shouldReconnect) connectToWhatsApp();
+            } else if (connection === 'open') {
+                console.log('[WPP] WhatsApp CONECTADO!');
                 sendToFrontend('authenticated', true);
-            });
-
-            client.on('message', async (msg) => {
-                if (msg.from.includes('@g.us')) return;
-                sendToFrontend('message', {
-                    id: msg.id.id,
-                    from: msg.from,
-                    text: msg.body,
-                    timestamp: new Date()
-                });
-            });
-
-            ws.on('message', async (data) => {
-                try {
-                    const { type, payload } = JSON.parse(data);
-                    if (type === 'send_message') {
-                        await client.sendMessage(payload.to, payload.text);
-                    }
-                } catch (e) { console.error('[WS] Erro:', e.message); }
-            });
+            }
         });
 
-        client.initialize().catch(err => {
-            console.error('[WPP] Erro ao inicializar:', err.message);
+        // Salvar credenciais quando atualizadas
+        sock.ev.on('creds.update', saveCreds);
+
+        // Receber Mensagens
+        sock.ev.on('messages.upsert', async m => {
+            const msg = m.messages[0];
+            if (!msg.key.fromMe && m.type === 'notify') {
+                const sender = msg.key.remoteJid;
+                const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
+
+                if (text && !sender.includes('@g.us')) {
+                    console.log(`[MSG] De: ${sender} -> ${text}`);
+                    sendToFrontend('message', {
+                        id: msg.key.id,
+                        from: sender,
+                        text: text,
+                        timestamp: new Date()
+                    });
+                }
+            }
         });
-    } catch (err) {
-        console.error('[WPP] Falha crítica:', err.message);
-    }
+
+        // Enviar Mensagens vindas do Frontend
+        ws.on('message', async (data) => {
+            try {
+                const { type, payload } = JSON.parse(data);
+                if (type === 'send_message') {
+                    await sock.sendMessage(payload.to, { text: payload.text });
+                    console.log(`[MSG] Enviada para: ${payload.to}`);
+                }
+            } catch (e) { console.error('[WS Error]', e.message); }
+        });
+    });
 }
+
+// Inicia o servidor e a conexão
+server.listen(port, "0.0.0.0", () => {
+    console.log(`[SERVER] Rodando em http://localhost:${port}`);
+    connectToWhatsApp();
+});

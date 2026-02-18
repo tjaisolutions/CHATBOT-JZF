@@ -1,17 +1,18 @@
+
 {
   "name": "whatsapp-gemini-unified",
   "version": "1.0.0",
-  "description": "Unified WhatsApp Chatbot Engine for Render",
+  "description": "Unified WhatsApp Chatbot Engine for Render using Baileys",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "bash render-build.sh"
+    "build": "npm install"
   },
   "dependencies": {
     "express": "^4.19.2",
-    "whatsapp-web.js": "^1.26.0",
+    "@whiskeysockets/baileys": "^6.7.9",
     "ws": "^8.18.0",
-    "qrcode-terminal": "^0.12.0",
-    "puppeteer": "^22.10.0"
+    "pino": "^9.1.0",
+    "qrcode": "^1.5.3"
   }
 }

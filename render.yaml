@@ -1,3 +1,4 @@
+
 services:
   - type: web
     name: chatbot-jzf
@@ -12,9 +13,3 @@ services:
         value: --max-old-space-size=400
       - key: API_KEY
         sync: false
-      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-        value: "false"
-      - key: PUPPETEER_CACHE_DIR
-        value: "/opt/render/project/src/.puppeteer_cache"
-      - key: PUPPETEER_EXECUTABLE_PATH
-        value: "/opt/render/project/src/.chrome_stable/chrome"
