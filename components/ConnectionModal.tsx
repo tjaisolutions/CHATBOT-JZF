@@ -19,33 +19,48 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ onClose, isConnected,
   useEffect(() => {
     whatsappService.setCallbacks({
       onQR: async (qrString) => {
+        if (!qrString || typeof qrString !== 'string' || qrString.trim() === '') {
+            console.warn("Recebido QR Code vazio ou inválido.");
+            return;
+        }
         try {
-          const url = await QRCode.toDataURL(qrString);
+          // A função toDataURL pode lançar erro se a string não for um padrão de QR válido
+          const url = await QRCode.toDataURL(qrString, {
+            margin: 2,
+            scale: 10,
+            color: {
+              dark: '#111b21',
+              light: '#ffffff'
+            }
+          });
           setQrDataUrl(url);
         } catch (err) {
-          console.error("Error generating QR image:", err);
+          console.error("Erro ao converter string de QR em imagem:", err);
         }
-        setLogs([...whatsappService.getLogs()]);
+        setLogs(whatsappService.getLogs());
       },
       onStatus: (status) => {
         if (status === 'CONNECTED') {
           onConnect();
         }
-        setLogs([...whatsappService.getLogs()]);
+        setLogs(whatsappService.getLogs());
       }
     });
 
     if (!isConnected && !isConnecting) {
       setIsConnecting(true);
-      whatsappService.initEngine();
+      whatsappService.initEngine().catch(err => {
+          console.error("Falha ao iniciar motor de conexão:", err);
+      });
     }
-  }, [isConnected, onConnect]);
+  }, [isConnected, onConnect, isConnecting]);
 
-  // Atualiza logs periodicamente
+  // Atualiza logs periodicamente para o console visual
   useEffect(() => {
     const interval = setInterval(() => {
-      setLogs([...whatsappService.getLogs()]);
-    }, 1000);
+      const currentLogs = whatsappService.getLogs();
+      setLogs(currentLogs);
+    }, 1500);
     return () => clearInterval(interval);
   }, []);
 
@@ -80,8 +95,12 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ onClose, isConnected,
                      </div>
                      <span className="text-[10px] text-gray-400 font-mono">Status: {whatsappService.getStatus()}</span>
                    </div>
-                   <div className="bg-gray-900 rounded p-4 h-48 overflow-y-auto font-mono text-[10px] text-green-400 scroll-smooth">
-                      {logs.map((log, i) => <div key={i}>{log}</div>)}
+                   <div className="bg-gray-900 rounded p-4 h-48 overflow-y-auto font-mono text-[10px] text-green-400 scroll-smooth shadow-inner">
+                      {logs.length > 0 ? logs.map((log, i) => (
+                        <div key={i} className="mb-1">{log}</div>
+                      )) : (
+                        <div className="opacity-50 italic">Aguardando logs do sistema...</div>
+                      )}
                       <div className="animate-pulse">_</div>
                    </div>
                 </div>
@@ -92,10 +111,10 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ onClose, isConnected,
                   <i className="fas fa-check-double text-5xl"></i>
                 </div>
                 <h2 className="text-3xl font-bold text-gray-800">Sessão Ativa</h2>
-                <p className="text-gray-500 max-w-md">Seu WhatsApp está pareado. A IA Gemini responderá automaticamente aos novos contatos.</p>
-                <div className="flex gap-4 pt-6">
-                  <button onClick={onClose} className="px-10 py-3 bg-[#922c26] text-white rounded-full font-bold shadow-lg">IR PARA O CHAT</button>
-                  <button onClick={onDisconnect} className="px-10 py-3 border border-gray-200 text-red-500 rounded-full font-bold hover:bg-red-50">ENCERRAR SESSÃO</button>
+                <p className="text-gray-500 max-w-md">Seu WhatsApp está pareado e pronto. A IA Gemini responderá automaticamente aos seus clientes.</p>
+                <div className="flex flex-wrap justify-center gap-4 pt-6">
+                  <button onClick={onClose} className="px-10 py-3 bg-[#922c26] text-white rounded-full font-bold shadow-lg hover:brightness-110 active:scale-95 transition-all">IR PARA O CHAT</button>
+                  <button onClick={onDisconnect} className="px-10 py-3 border border-gray-200 text-red-500 rounded-full font-bold hover:bg-red-50 active:scale-95 transition-all">ENCERRAR SESSÃO</button>
                 </div>
               </div>
             )}
@@ -106,11 +125,13 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ onClose, isConnected,
               <div className="relative">
                 <div className="p-4 bg-white border shadow-inner rounded-sm relative">
                   {qrDataUrl ? (
-                    <img src={qrDataUrl} alt="QR Code" className="w-[264px] h-[264px]" />
+                    <img src={qrDataUrl} alt="QR Code WhatsApp" className="w-[264px] h-[264px]" />
                   ) : (
                     <div className="w-[264px] h-[264px] bg-gray-50 flex flex-col items-center justify-center text-center p-6">
-                       <div className="w-8 h-8 border-2 border-[#922c26] border-t-transparent rounded-full animate-spin mb-4"></div>
-                       <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Aguardando Engine...</span>
+                       <div className="w-10 h-10 border-2 border-[#922c26] border-t-transparent rounded-full animate-spin mb-4"></div>
+                       <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-tight">
+                         Gerando QR Code...<br/>isso pode levar 10-20s
+                       </span>
                     </div>
                   )}
                   {qrDataUrl && (
@@ -118,9 +139,8 @@ const ConnectionModal: React.FC<ConnectionModalProps> = ({ onClose, isConnected,
                   )}
                 </div>
               </div>
-              <p className="mt-8 text-xs text-gray-400 text-center leading-relaxed">
-                Este código expira em 30 segundos.<br/>
-                O sistema atualizará automaticamente.
+              <p className="mt-8 text-[11px] text-gray-400 text-center leading-relaxed max-w-[280px]">
+                O código é gerado automaticamente. Se ele expirar, o sistema solicitará um novo ao motor Baileys.
               </p>
             </div>
           )}

@@ -12,20 +12,18 @@ class WhatsAppService {
   async initEngine(): Promise<void> {
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) return;
 
-    // Detecta automaticamente o protocolo e o host
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    // Remove barras extras e garante o formato correto
-    const url = `${protocol}//${host}`;
+    // Construção robusta da URL de WebSocket baseada na origem atual
+    // Converte http://... para ws://... e https://... para wss://...
+    const wsUrl = window.location.origin.replace(/^http/, 'ws') + '/';
 
-    this.addLog(`Conectando ao Socket em ${url}...`);
+    this.addLog(`Iniciando conexão WebSocket em: ${wsUrl}`);
     this.status = 'CONNECTING';
     
     try {
-      this.socket = new WebSocket(url);
+      this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
-        this.addLog("Conexão WebSocket aberta.");
+        this.addLog("Canal de sinalização aberto com sucesso.");
         this.onStatusChange?.('CONNECTING');
       };
 
@@ -34,10 +32,12 @@ class WhatsAppService {
             const data = JSON.parse(event.data);
             switch (data.type) {
               case 'qr':
-                this.onQRReceived?.(data.payload);
+                if (data.payload) {
+                    this.onQRReceived?.(data.payload);
+                }
                 break;
               case 'authenticated':
-                this.addLog("WhatsApp Autenticado!");
+                this.addLog("WhatsApp Autenticado com Sucesso!");
                 this.status = 'CONNECTED';
                 this.onStatusChange?.('CONNECTED');
                 break;
@@ -46,34 +46,35 @@ class WhatsAppService {
                 break;
             }
         } catch (e) {
-            console.error("Erro ao processar mensagem do socket:", e);
+            console.error("Erro ao decodificar pacote do servidor:", e);
         }
       };
 
-      this.socket.onclose = () => {
-        this.addLog("Conexão encerrada. Tentando reconectar...");
+      this.socket.onclose = (event) => {
+        this.addLog(`Conexão perdida (Código: ${event.code}). Reconectando em 5s...`);
         this.status = 'DISCONNECTED';
         this.socket = null;
         this.onStatusChange?.('DISCONNECTED');
-        // Reconecta automaticamente após 5 segundos
         setTimeout(() => this.initEngine(), 5000);
       };
 
       this.socket.onerror = (err) => {
-        this.addLog("Erro no WebSocket.");
+        this.addLog("Falha crítica no WebSocket. Verifique o console.");
+        console.error("WebSocket Error Details:", err);
       };
 
     } catch (e) {
-      this.addLog("Erro ao inicializar conexão.");
+      this.addLog("Erro de sintaxe na URL ou falha de inicialização.");
+      console.error("Erro ao instanciar WebSocket:", e);
     }
   }
 
   private handleIncomingMessage(payload: any) {
     const msg: Message = {
-      id: payload.id,
+      id: payload.id || Date.now().toString(),
       text: payload.text,
       sender: 'user',
-      timestamp: new Date(payload.timestamp),
+      timestamp: payload.timestamp ? new Date(payload.timestamp) : new Date(),
       status: 'read'
     };
     this.onMessageReceived?.(msg, payload.from);
@@ -81,11 +82,14 @@ class WhatsAppService {
 
   private addLog(msg: string) {
     const time = new Date().toLocaleTimeString();
-    this.logs.push(`[${time}] ${msg}`);
-    console.log(`[WPP] ${msg}`);
+    const entry = `[${time}] ${msg}`;
+    this.logs.push(entry);
+    // Manter apenas os últimos 50 logs para evitar consumo excessivo de memória
+    if (this.logs.length > 50) this.logs.shift();
+    console.log(`[WPP_SERVICE] ${msg}`);
   }
 
-  getLogs() { return this.logs; }
+  getLogs() { return [...this.logs]; }
 
   async sendMessage(chatId: string, text: string): Promise<boolean> {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
