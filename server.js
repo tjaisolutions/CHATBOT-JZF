@@ -14,11 +14,18 @@ const app = express();
 const port = process.env.PORT || 3001;
 const server = http.createServer(app);
 
+// Middleware de log para depuração no Render
+app.use((req, res, next) => {
+    console.log(`[HTTP] ${req.method} ${req.url}`);
+    next();
+});
+
 // Servir arquivos estáticos
 app.use(express.static(__dirname));
 
 // 1. ENDPOINTS DE SAÚDE E CONFIGURAÇÃO
 app.get('/api/config', (req, res) => {
+    console.log('[API] Enviando configurações de API...');
     res.json({
         API_KEY: process.env.API_KEY || ""
     });
@@ -33,8 +40,9 @@ const wss = new WebSocketServer({ server });
 // 2. INICIA O SERVIDOR HTTP IMEDIATAMENTE
 server.listen(port, "0.0.0.0", () => {
     console.log(`[HTTP] Servidor ONLINE na porta ${port}`);
-    // Pequeno delay para garantir que o sistema de arquivos esteja estável no Render
-    setTimeout(initWhatsApp, 5000);
+    // Delay maior para permitir que o frontend carregue antes do Chrome ocupar a RAM
+    console.log('[WPP] Agendando inicialização do WhatsApp para daqui a 15 segundos...');
+    setTimeout(initWhatsApp, 15000);
 });
 
 function getChromiumExecutablePath() {
@@ -47,15 +55,13 @@ function getChromiumExecutablePath() {
         '/usr/bin/chromium-browser'
     ];
 
-    console.log('[DEBUG] Buscando Chrome nos seguintes caminhos:');
     for (const p of pathsToTry) {
         if (p && fs.existsSync(p)) {
             try {
                 fs.accessSync(p, fs.constants.X_OK);
-                console.log(`[DEBUG] ENCONTRADO E EXECUTÁVEL: ${p}`);
                 return p;
             } catch (e) {
-                console.warn(`[DEBUG] Encontrado mas SEM PERMISSÃO: ${p}`);
+                console.warn(`[DEBUG] Permissão negada em: ${p}`);
             }
         }
     }
@@ -66,6 +72,7 @@ function initWhatsApp() {
     console.log('--- [WPP] INICIALIZANDO ENGINE ---');
     
     const chromePath = getChromiumExecutablePath();
+    console.log(`[WPP] Caminho do Chrome: ${chromePath || 'Padrão'}`);
     
     const puppeteerOptions = {
         headless: "new",
@@ -77,7 +84,7 @@ function initWhatsApp() {
             '--no-first-run',
             '--no-zygote',
             '--disable-gpu',
-            '--single-process',
+            '--single-process', // Fundamental para instâncias com pouca RAM
             '--disable-extensions',
             '--disable-default-apps',
             '--mute-audio'
@@ -133,10 +140,6 @@ function initWhatsApp() {
     });
 
     client.initialize().catch(err => {
-        console.error('#########################################');
-        console.error('[WPP] ERRO CRÍTICO NA ENGINE:');
-        console.error(err.message);
-        console.error('Path utilizado:', chromePath);
-        console.error('#########################################');
+        console.error('[WPP] ERRO CRÍTICO NA ENGINE:', err.message);
     });
 }

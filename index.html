@@ -17,6 +17,11 @@
         #root { height: 100vh; display: flex; align-items: center; justify-content: center; }
         .whatsapp-bg { background-color: #efeae2; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); opacity: 0.9; }
         .msg-shadow { box-shadow: 0 1px 0.5px rgba(0,0,0,0.13); }
+        @keyframes loading {
+          0% { left: -100%; width: 30%; }
+          50% { width: 70%; }
+          100% { left: 100%; width: 30%; }
+        }
     </style>
 
     <script>
@@ -29,28 +34,37 @@
             
             for (let i = 0; i < retries; i++) {
                 try {
-                    if (statusEl) statusEl.innerText = `Acordando servidor... (${i + 1}/${retries})`;
+                    if (statusEl) statusEl.innerText = `Conectando ao servidor... (${i + 1}/${retries})`;
                     
-                    const res = await fetch('/api/config');
+                    // Timeout de 5 segundos para o fetch não travar
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 5000);
+                    
+                    const res = await fetch('/api/config', { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     
                     const config = await res.json();
                     window.process.env.API_KEY = config.API_KEY;
                     
-                    console.log("Configurações carregadas!");
+                    console.log("Configurações carregadas com sucesso!");
                     window.isConfigLoaded = true;
-                    // Dispara o evento E marca a flag global para evitar corrida
                     window.dispatchEvent(new Event('config-loaded'));
                     return;
                 } catch (e) {
+                    console.warn(`Tentativa ${i + 1} falhou:`, e.message);
                     await new Promise(r => setTimeout(r, 3000));
                 }
             }
             
             if (statusEl) {
                 statusEl.innerHTML = `
-                    <div class="text-red-600 font-bold p-4 bg-white rounded shadow">Erro: O servidor demorou muito para responder.</div>
-                    <button onclick="location.reload()" class="mt-4 px-6 py-2 bg-[#922c26] text-white rounded-full font-bold">Tentar Novamente</button>
+                    <div class="text-red-600 font-bold p-6 bg-white rounded shadow-lg max-w-sm">
+                        <p>O servidor demorou muito para responder.</p>
+                        <p class="text-xs font-normal mt-2 text-gray-400">Certifique-se de que o deploy no Render terminou corretamente.</p>
+                    </div>
+                    <button onclick="location.reload()" class="mt-6 px-8 py-3 bg-[#922c26] text-white rounded-full font-bold shadow-md hover:bg-[#7a241f] transition-all">Tentar Novamente</button>
                 `;
             }
         }
@@ -73,14 +87,17 @@
 <body>
     <div id="root">
         <div class="flex flex-col items-center">
-            <i class="fab fa-whatsapp text-6xl text-[#922c26] mb-4 animate-pulse"></i>
+            <i class="fab fa-whatsapp text-7xl text-[#922c26] mb-10 animate-pulse"></i>
+            <div class="w-64 h-1 bg-gray-200 relative overflow-hidden mb-6 rounded-full">
+               <div class="absolute h-full bg-[#922c26] w-1/2" style="animation: loading 2s ease-in-out infinite;"></div>
+            </div>
             <p id="loading-status" class="text-gray-500 font-medium text-center">Inicializando interface...</p>
         </div>
     </div>
     
-    <!-- Script modificado para lidar com a flag global -->
     <script type="text/babel" data-type="module">
         const initApp = () => {
+            console.log("Iniciando aplicação React...");
             const script = document.createElement('script');
             script.type = 'text/babel';
             script.dataset.type = 'module';

@@ -1,10 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Message, Attachment } from '../types';
-import { COLORS, MOCK_CONTACTS } from '../constants';
-import { geminiService } from '../services/geminiService';
-import FilePreviewOverlay from './FilePreviewOverlay';
-import EmojiPicker from './EmojiPicker';
+import { Message, Attachment } from '../types.ts';
+import { COLORS, MOCK_CONTACTS } from '../constants.ts';
+import { geminiService } from '../services/geminiService.ts';
+import FilePreviewOverlay from './FilePreviewOverlay.tsx';
+import EmojiPicker from './EmojiPicker.tsx';
 
 interface ChatWindowProps {
   chatId: string;
@@ -54,8 +54,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       attachment: attachment
     };
 
-    const updatedMessages = [...messages, userMsg];
-    onUpdateMessages(updatedMessages);
+    onUpdateMessages([...messages, userMsg]);
     setInputText('');
 
     if (chatId === 'gemini-ai') {
@@ -70,7 +69,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         status: 'read'
       };
       
-      onUpdateMessages([...updatedMessages, botMsg]);
+      onUpdateMessages([...messages, userMsg, botMsg]);
       setIsTyping(false);
     }
   };

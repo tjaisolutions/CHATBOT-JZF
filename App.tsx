@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import Sidebar from './components/Sidebar';
-import ChatWindow from './components/ChatWindow';
-import ConnectionModal from './components/ConnectionModal';
-import ContactInfoSidebar from './components/ContactInfoSidebar';
-import { COLORS, MOCK_CHATS, MOCK_CONTACTS } from './constants';
-import { Message, Chat } from './types';
-import { whatsappService } from './services/whatsappService';
-import { geminiService } from './services/geminiService';
+import Sidebar from './components/Sidebar.tsx';
+import ChatWindow from './components/ChatWindow.tsx';
+import ConnectionModal from './components/ConnectionModal.tsx';
+import ContactInfoSidebar from './components/ContactInfoSidebar.tsx';
+import { COLORS, MOCK_CHATS, MOCK_CONTACTS } from './constants.ts';
+import { Message, Chat } from './types.ts';
+import { whatsappService } from './services/whatsappService.ts';
+import { geminiService } from './services/geminiService.ts';
 
 export const formatWhatsAppDate = (date: Date): string => {
   const now = new Date();
@@ -108,14 +108,15 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Corrected method name to setCallbacks and wrapped the handler in the expected object format
     whatsappService.setCallbacks({
       onMessage: (msg, chatId) => {
-        const currentHistory = chatsMessages[chatId] || [];
-        handleUpdateMessages(chatId, [...currentHistory, msg]);
+        setChatsMessages(prev => {
+          const currentHistory = prev[chatId] || [];
+          return { ...prev, [chatId]: [...currentHistory, msg] };
+        });
       }
     });
-  }, [chatsMessages]);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('whatsapp_history', JSON.stringify(chatsMessages));
@@ -193,7 +194,6 @@ const App: React.FC = () => {
   }, [chatsMessages, blockedContactIds, assignedAttendants, currentAttendantRole, unreadCounts, broadcastLists, isConnected]);
 
   const handleUpdateMessages = async (chatId: string, newMessages: Message[]) => {
-    const currentHistory = chatsMessages[chatId] || [];
     const lastMsg = newMessages[newMessages.length - 1];
     
     setChatsMessages(prev => {
@@ -232,7 +232,10 @@ const App: React.FC = () => {
                 timestamp: new Date(),
                 status: 'read'
             };
-            handleUpdateMessages(chatId, [...newMessages, botMsg]);
+            setChatsMessages(prev => ({
+              ...prev,
+              [chatId]: [...(prev[chatId] || []), botMsg]
+            }));
             whatsappService.sendMessage(chatId, responseText);
         }
     }
@@ -284,16 +287,14 @@ const App: React.FC = () => {
         <div className="w-64 h-0.5 bg-gray-200 relative overflow-hidden mb-4">
            <div className="absolute h-full bg-[#922c26] animate-[loading_2s_ease-in-out_infinite]"></div>
         </div>
-        <h1 className="text-gray-600 font-light text-xl">Iniciando Biblioteca...</h1>
+        <h1 className="text-gray-600 font-light text-xl">Iniciando interface...</h1>
       </div>
     );
   }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden p-0 md:p-4 lg:px-10 lg:py-4" style={{ backgroundColor: COLORS.background }}>
-      <div className="flex-1 max-w-[1600px] mx-auto w-full bg-white shadow-2xl overflow-hidden rounded-none md:rounded-lg flex-col md:flex-row border border-gray-300 relative">
-        <div className="absolute top-0 left-0 w-full h-32 z-[-1]" style={{ backgroundColor: COLORS.primary }}></div>
-        
+      <div className="flex-1 max-w-[1600px] mx-auto w-full bg-white shadow-2xl overflow-hidden rounded-none md:rounded-lg flex flex-col md:flex-row border border-gray-300 relative">
         <Sidebar 
           activeChatId={activeChatId} 
           onSelectChat={setActiveChatId}

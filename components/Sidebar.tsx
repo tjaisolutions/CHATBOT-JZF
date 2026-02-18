@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { MOCK_CONTACTS, COLORS } from '../constants';
-import BroadcastModal from './BroadcastModal';
+import { MOCK_CONTACTS, COLORS } from '../constants.ts';
+import BroadcastModal from './BroadcastModal.tsx';
 
 interface DynamicChat {
   id: string;
