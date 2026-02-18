@@ -7,14 +7,15 @@ export class GeminiService {
 
   private getAI() {
     if (!this.ai) {
-      // Prioriza a chave do window (injetada pelo index.html) ou process.env
-      const apiKey = (window as any).process?.env?.API_KEY || process.env.API_KEY;
+      // Fix: API key must be obtained exclusively from the environment variable process.env.API_KEY
+      const apiKey = process.env.API_KEY;
       
       if (!apiKey) {
         console.error("GeminiService: API_KEY não encontrada!");
         return null;
       }
       
+      // Fix: Initialization using a named parameter for the API key
       this.ai = new GoogleGenAI({ apiKey });
     }
     return this.ai;
@@ -67,10 +68,12 @@ export class GeminiService {
             ]
           }
         });
+        // Accessing .text property directly as per latest SDK guidelines
         return response.text || "Recebi sua imagem.";
       }
 
       const response = await chat.sendMessage({ message: message || "Olá" });
+      // Accessing .text property directly as per latest SDK guidelines
       return response.text || "Desculpe, não consegui processar sua mensagem.";
     } catch (error) {
       console.error("Gemini API Error:", error);

@@ -1,7 +1,6 @@
 
 /**
  * BACKEND LEVE - WHATSAPP VIA BAILEYS (SEM CHROME)
- * Consumo de RAM aproximado: 100MB-150MB
  */
 
 const { 
@@ -17,11 +16,11 @@ const path = require('path');
 const { WebSocketServer } = require('ws');
 
 const app = express();
-const port = process.env.PORT || 10000; // Porta padrão do Render
+const port = process.env.PORT || 10000;
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Middleware para corrigir MIME types de arquivos TypeScript para o navegador
+// Middleware crucial: Define o MIME type correto ANTES do static
 app.use((req, res, next) => {
     if (req.url.endsWith('.ts') || req.url.endsWith('.tsx')) {
         res.type('application/javascript');
@@ -29,7 +28,10 @@ app.use((req, res, next) => {
     next();
 });
 
-// Configuração básica do Express
+// Serve arquivos estáticos da raiz
+app.use(express.static(__dirname));
+
+// Rota de configuração
 app.get('/api/config', (req, res) => {
     res.json({ 
         API_KEY: process.env.API_KEY || "",
@@ -37,13 +39,13 @@ app.get('/api/config', (req, res) => {
     });
 });
 
-app.use(express.static(__dirname));
+// Rota catch-all para o SPA (apenas se não for um arquivo com extensão)
 app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    if (req.path.includes('.')) return next(); // Deixa o static ou 404 cuidar de arquivos
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Inicialização do WhatsApp (Baileys)
 async function connectToWhatsApp() {
     console.log('[WPP] Iniciando conexão via Protocolo (Baileys)...');
     
@@ -62,8 +64,6 @@ async function connectToWhatsApp() {
         sock.ev.on('creds.update', saveCreds);
 
         wss.on('connection', (ws) => {
-            console.log('[WS] Novo cliente conectado ao Socket');
-
             const sendToFrontend = (type, payload) => {
                 if (ws.readyState === 1) ws.send(JSON.stringify({ type, payload }));
             };
@@ -106,7 +106,7 @@ async function connectToWhatsApp() {
         });
 
     } catch (err) {
-        console.error('[WPP Error] Falha ao iniciar Baileys:', err.message);
+        console.error('[WPP Error]', err.message);
         setTimeout(connectToWhatsApp, 5000);
     }
 }

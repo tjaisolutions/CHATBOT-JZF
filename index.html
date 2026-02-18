@@ -7,6 +7,8 @@
     <title>WhatsApp Business</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Babel Standalone deve vir antes dos scripts TSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
@@ -26,50 +28,35 @@
     <script>
         window.process = { env: { API_KEY: "" } };
         window.isConfigLoaded = false;
-        let retryCount = 0;
         
         async function loadConfig() {
-            const statusEl = document.getElementById('loading-status');
-            retryCount++;
-            
             try {
-                if (statusEl) statusEl.innerText = retryCount > 5 ? "O servidor está acordando, por favor aguarde..." : "Conectando ao servidor...";
-                
-                const res = await fetch('/api/config', { 
-                    cache: 'no-store',
-                    headers: { 'Accept': 'application/json' }
-                });
-                
+                const res = await fetch('/api/config', { cache: 'no-store' });
                 if (res.ok) {
                     const config = await res.json();
                     window.process.env.API_KEY = config.API_KEY;
                     window.isConfigLoaded = true;
-                    console.log("Configurações carregadas com sucesso!");
                     window.dispatchEvent(new Event('config-loaded'));
                     return;
                 }
-            } catch (e) {
-                console.warn(`Tentativa ${retryCount} de conexão falhou.`);
-            }
-            
-            // Tenta novamente em 2 segundos
-            setTimeout(loadConfig, 2500);
+            } catch (e) { console.warn("Erro ao carregar config, tentando novamente..."); }
+            setTimeout(loadConfig, 2000);
         }
-        
         window.addEventListener('DOMContentLoaded', loadConfig);
     </script>
 
     <script type="importmap">
-    {
-      "imports": {
-        "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
-        "react": "https://esm.sh/react@^19.2.4",
-        "react/": "https://esm.sh/react@^19.2.4/",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-        "qrcode": "https://esm.sh/qrcode@^1.5.3"
-      }
-    }
-    </script>
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom": "https://esm.sh/react-dom@^19.2.4/client",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "qrcode": "https://esm.sh/qrcode@^1.5.3",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
 </head>
 <body>
     <div id="root">
@@ -78,32 +65,20 @@
             <div class="w-64 h-1 bg-gray-200 relative overflow-hidden mb-6 rounded-full">
                <div class="absolute h-full bg-[#922c26] w-1/2" style="animation: loading 2s ease-in-out infinite;"></div>
             </div>
-            <p id="loading-status" class="text-gray-500 font-medium text-center px-6">Iniciando interface...</p>
+            <p id="loading-status" class="text-gray-500 font-medium text-center px-6">Conectando ao servidor...</p>
         </div>
     </div>
     
-    <script type="text/babel" data-type="module">
-        const initApp = async () => {
-            console.log("Iniciando montagem da aplicação...");
-            try {
-                // Importa dinamicamente para garantir que o Babel processe
-                const module = await import('./index.tsx');
-            } catch (err) {
-                console.error("Falha ao carregar index.tsx:", err);
-                // Fallback: Tenta adicionar como script tag se o import falhar
-                const script = document.createElement('script');
-                script.type = 'text/babel';
-                script.dataset.type = 'module';
-                script.src = 'index.tsx';
-                document.body.appendChild(script);
-            }
-        };
-
-        if (window.isConfigLoaded) {
-            initApp();
-        } else {
-            window.addEventListener('config-loaded', initApp);
-        }
+    <!-- Script que aguarda a configuração para injetar o entrypoint -->
+    <script>
+        window.addEventListener('config-loaded', () => {
+            console.log("Configurações OK. Injetando index.tsx...");
+            const script = document.createElement('script');
+            script.type = 'text/babel';
+            script.setAttribute('data-type', 'module');
+            script.src = 'index.tsx';
+            document.body.appendChild(script);
+        });
     </script>
 </body>
 </html>
