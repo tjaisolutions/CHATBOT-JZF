@@ -2,54 +2,52 @@
 # exit on error
 set -o errexit
 
-echo "--- [BUILD] INICIANDO INSTALAÇÃO ROBUSTA ---"
+echo "--- [BUILD] INICIANDO LIMPEZA E INSTALAÇÃO ---"
 
-# 1. Limpeza total de caches e diretórios anteriores
+# 1. Limpeza profunda
 rm -rf .chrome_stable
+rm -rf .puppeteer_cache
 rm -rf node_modules/.cache/puppeteer
-mkdir -p .chrome_stable
 
-# 2. Instalação de dependências
-# Forçamos o download do Chrome pelo Puppeteer
+# 2. Configurações de ambiente para o instalador
 export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+export PUPPETEER_CACHE_DIR=$(pwd)/.puppeteer_cache
+
+# 3. Instalação de dependências
+echo "--- [BUILD] Instalando dependências do projeto..."
 npm install --no-audit --no-fund --quiet
 
-# 3. Localização do binário nativo
-echo "--- [BUILD] Localizando binário do Chrome..."
-# O Puppeteer 22+ instala em subdiretórios específicos dentro de .cache
-RAW_CHROME_BIN=$(find node_modules/.cache/puppeteer -type f -name "chrome" -executable | head -n 1)
+# 4. Forçar instalação do Chrome caso o npm install não o faça
+echo "--- [BUILD] Garantindo instalação do Chrome..."
+npx puppeteer browsers install chrome --path "$(pwd)/.puppeteer_cache"
+
+# 5. Localização e Preparação do Binário
+echo "--- [BUILD] Localizando executáveis..."
+RAW_CHROME_BIN=$(find "$(pwd)/.puppeteer_cache" -type f -name "chrome" -executable | head -n 1)
 
 if [ -z "$RAW_CHROME_BIN" ]; then
-    echo "--- [BUILD] Binário não encontrado no cache local. Tentando npx puppeteer..."
-    ABS_PATH=$(pwd)
-    npx puppeteer browsers install chrome --path "$ABS_PATH/.puppeteer_cache"
-    RAW_CHROME_BIN=$(find "$ABS_PATH/.puppeteer_cache" -type f -name "chrome" -executable | head -n 1)
-fi
-
-if [ -z "$RAW_CHROME_BIN" ]; then
-    echo "!!! ERRO CRÍTICO: Binário do Chrome não encontrado após todas as tentativas."
+    echo "!!! ERRO: Binário do Chrome não encontrado!"
     exit 1
 fi
 
-echo "--- [BUILD] Binário encontrado em: $RAW_CHROME_BIN"
-
-# 4. Copiar o binário em vez de linkar (evita erros EACCES de symlinks no Render)
-# Copiamos o binário e os recursos necessários da pasta do Chrome
 CHROME_DIR=$(dirname "$RAW_CHROME_BIN")
-echo "--- [BUILD] Copiando arquivos do Chrome para pasta estável..."
-cp -r "$CHROME_DIR/." .chrome_stable/
+mkdir -p .chrome_stable
+echo "--- [BUILD] Movendo arquivos para pasta de produção..."
+cp -r "$CHROME_DIR"/* .chrome_stable/
 
-# 5. Garantir permissões de execução RECURSIVAMENTE
-echo "--- [BUILD] Aplicando permissões de execução..."
+# 6. CORREÇÃO CRÍTICA DE PERMISSÕES (EACCES)
+# No Render, às vezes precisamos dar permissão em toda a pasta, não só no executável
+echo "--- [BUILD] Aplicando permissões de execução (chmod 755)..."
 chmod -R 755 .chrome_stable/
-chmod +x .chrome_stable/chrome
+find .chrome_stable/ -type f -exec chmod +x {} \;
 
-# 6. Verificação final
+echo "--- [BUILD] Verificando executável final..."
 if [ -x ".chrome_stable/chrome" ]; then
-    echo "--- [BUILD] SUCESSO: .chrome_stable/chrome é executável."
+    echo "--- [BUILD] SUCESSO: O Chrome está pronto e é executável."
+    ls -l .chrome_stable/chrome
 else
-    echo "!!! ERRO: .chrome_stable/chrome NÃO tem permissão de execução."
+    echo "!!! ERRO: Falha ao conceder permissões ao binário."
     exit 1
 fi
 
-echo "--- [BUILD] CONCLUÍDO ---"
+echo "--- [BUILD] PROCESSO CONCLUÍDO COM SUCESSO ---"

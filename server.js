@@ -33,30 +33,31 @@ const wss = new WebSocketServer({ server });
 // 2. INICIA O SERVIDOR HTTP IMEDIATAMENTE
 server.listen(port, "0.0.0.0", () => {
     console.log(`[HTTP] Servidor ONLINE na porta ${port}`);
-    setTimeout(initWhatsApp, 2000);
+    // Pequeno delay para garantir que o sistema de arquivos esteja estável no Render
+    setTimeout(initWhatsApp, 5000);
 });
 
 function getChromiumExecutablePath() {
-    // Tenta primeiro o caminho fixo criado pelo build script
-    const stablePath = path.join(process.cwd(), '.chrome_stable', 'chrome');
-    if (fs.existsSync(stablePath)) {
-        console.log(`[DEBUG] Chrome encontrado em: ${stablePath}`);
-        try {
-            fs.accessSync(stablePath, fs.constants.X_OK);
-            return stablePath;
-        } catch (e) {
-            console.error(`[DEBUG] ERRO: ${stablePath} existe mas não é executável!`);
-        }
-    }
-
-    const fallbacks = [
+    const projectRoot = process.cwd();
+    const pathsToTry = [
+        path.join(projectRoot, '.chrome_stable', 'chrome'),
+        path.join(projectRoot, '.chrome_stable', 'chrome-linux', 'chrome'),
         process.env.PUPPETEER_EXECUTABLE_PATH,
         '/usr/bin/google-chrome',
         '/usr/bin/chromium-browser'
     ];
 
-    for (const p of fallbacks) {
-        if (p && fs.existsSync(p)) return p;
+    console.log('[DEBUG] Buscando Chrome nos seguintes caminhos:');
+    for (const p of pathsToTry) {
+        if (p && fs.existsSync(p)) {
+            try {
+                fs.accessSync(p, fs.constants.X_OK);
+                console.log(`[DEBUG] ENCONTRADO E EXECUTÁVEL: ${p}`);
+                return p;
+            } catch (e) {
+                console.warn(`[DEBUG] Encontrado mas SEM PERMISSÃO: ${p}`);
+            }
+        }
     }
     return null;
 }
@@ -85,8 +86,6 @@ function initWhatsApp() {
 
     if (chromePath) {
         puppeteerOptions.executablePath = chromePath;
-    } else {
-        console.warn('[WPP] AVISO: Nenhum binário do Chrome encontrado. Puppeteer tentará o padrão.');
     }
 
     const client = new Client({
@@ -135,10 +134,9 @@ function initWhatsApp() {
 
     client.initialize().catch(err => {
         console.error('#########################################');
-        console.error('[WPP] ERRO CRÍTICO AO INICIALIZAR CHROME:');
+        console.error('[WPP] ERRO CRÍTICO NA ENGINE:');
         console.error(err.message);
-        console.error('Path tentado:', chromePath);
-        console.error('Dica: Verifique as permissões de execução do arquivo.');
+        console.error('Path utilizado:', chromePath);
         console.error('#########################################');
     });
 }
