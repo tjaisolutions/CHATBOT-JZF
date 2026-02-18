@@ -14,7 +14,7 @@ const app = express();
 const port = process.env.PORT || 3001;
 const server = http.createServer(app);
 
-// Servir arquivos estáticos (colocado antes das rotas para evitar conflitos)
+// Servir arquivos estáticos
 app.use(express.static(__dirname));
 
 // 1. ENDPOINTS DE SAÚDE E CONFIGURAÇÃO
@@ -24,7 +24,6 @@ app.get('/api/config', (req, res) => {
     });
 });
 
-// Endpoint principal explicitamente servindo index.html se nada mais bater
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -34,13 +33,21 @@ const wss = new WebSocketServer({ server });
 // 2. INICIA O SERVIDOR HTTP IMEDIATAMENTE
 server.listen(port, "0.0.0.0", () => {
     console.log(`[HTTP] Servidor ONLINE na porta ${port}`);
-    // Inicializa o WhatsApp em background
     setTimeout(initWhatsApp, 2000);
 });
 
 function getChromiumExecutablePath() {
-    const stablePath = path.join(process.cwd(), '.chrome_stable/chrome');
-    if (fs.existsSync(stablePath)) return stablePath;
+    // Tenta primeiro o caminho fixo criado pelo build script
+    const stablePath = path.join(process.cwd(), '.chrome_stable', 'chrome');
+    if (fs.existsSync(stablePath)) {
+        console.log(`[DEBUG] Chrome encontrado em: ${stablePath}`);
+        try {
+            fs.accessSync(stablePath, fs.constants.X_OK);
+            return stablePath;
+        } catch (e) {
+            console.error(`[DEBUG] ERRO: ${stablePath} existe mas não é executável!`);
+        }
+    }
 
     const fallbacks = [
         process.env.PUPPETEER_EXECUTABLE_PATH,
@@ -58,7 +65,6 @@ function initWhatsApp() {
     console.log('--- [WPP] INICIALIZANDO ENGINE ---');
     
     const chromePath = getChromiumExecutablePath();
-    console.log(`[WPP] Usando executável do Chrome: ${chromePath || 'Padrão'}`);
     
     const puppeteerOptions = {
         headless: "new",
@@ -70,7 +76,7 @@ function initWhatsApp() {
             '--no-first-run',
             '--no-zygote',
             '--disable-gpu',
-            '--single-process', // Crucial para o Render Free
+            '--single-process',
             '--disable-extensions',
             '--disable-default-apps',
             '--mute-audio'
@@ -79,6 +85,8 @@ function initWhatsApp() {
 
     if (chromePath) {
         puppeteerOptions.executablePath = chromePath;
+    } else {
+        console.warn('[WPP] AVISO: Nenhum binário do Chrome encontrado. Puppeteer tentará o padrão.');
     }
 
     const client = new Client({
@@ -126,6 +134,11 @@ function initWhatsApp() {
     });
 
     client.initialize().catch(err => {
-        console.error('[WPP] ERRO FATAL NA ENGINE:', err.message);
+        console.error('#########################################');
+        console.error('[WPP] ERRO CRÍTICO AO INICIALIZAR CHROME:');
+        console.error(err.message);
+        console.error('Path tentado:', chromePath);
+        console.error('Dica: Verifique as permissões de execução do arquivo.');
+        console.error('#########################################');
     });
 }
