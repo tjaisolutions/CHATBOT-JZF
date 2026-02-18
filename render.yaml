@@ -7,7 +7,9 @@ services:
     startCommand: node server.js
     envVars:
       - key: NODE_VERSION
-        value: 20.0.0
+        value: 20.12.0
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=400
       - key: API_KEY
         sync: false
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
