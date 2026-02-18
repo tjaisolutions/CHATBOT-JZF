@@ -10,60 +10,61 @@ class WhatsAppService {
   private logs: string[] = [];
 
   async initEngine(): Promise<void> {
-    if (this.socket) return;
+    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) return;
 
-    // Detecta automaticamente o protocolo e o host (funciona em local e Render)
+    // Detecta automaticamente o protocolo e o host
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
+    // Remove barras extras e garante o formato correto
     const url = `${protocol}//${host}`;
 
-    this.addLog(`Connecting to WhatsApp Engine at ${url}...`);
+    this.addLog(`Conectando ao Socket em ${url}...`);
     this.status = 'CONNECTING';
     
     try {
       this.socket = new WebSocket(url);
 
       this.socket.onopen = () => {
-        this.addLog("Connected to Engine. Waiting for WhatsApp Auth...");
+        this.addLog("Conexão WebSocket aberta.");
         this.onStatusChange?.('CONNECTING');
       };
 
       this.socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        
-        switch (data.type) {
-          case 'qr':
-            this.addLog("New QR Code received.");
-            this.onQRReceived?.(data.payload);
-            break;
-          case 'authenticated':
-            this.addLog("WhatsApp is Ready.");
-            this.status = 'CONNECTED';
-            this.onStatusChange?.('CONNECTED');
-            break;
-          case 'message':
-            this.handleIncomingMessage(data.payload);
-            break;
-          case 'log':
-            this.addLog(data.payload);
-            break;
+        try {
+            const data = JSON.parse(event.data);
+            switch (data.type) {
+              case 'qr':
+                this.onQRReceived?.(data.payload);
+                break;
+              case 'authenticated':
+                this.addLog("WhatsApp Autenticado!");
+                this.status = 'CONNECTED';
+                this.onStatusChange?.('CONNECTED');
+                break;
+              case 'message':
+                this.handleIncomingMessage(data.payload);
+                break;
+            }
+        } catch (e) {
+            console.error("Erro ao processar mensagem do socket:", e);
         }
       };
 
       this.socket.onclose = () => {
-        this.addLog("Connection closed.");
+        this.addLog("Conexão encerrada. Tentando reconectar...");
         this.status = 'DISCONNECTED';
         this.socket = null;
         this.onStatusChange?.('DISCONNECTED');
+        // Reconecta automaticamente após 5 segundos
+        setTimeout(() => this.initEngine(), 5000);
       };
 
       this.socket.onerror = (err) => {
-        this.addLog("WebSocket Error.");
-        console.error(err);
+        this.addLog("Erro no WebSocket.");
       };
 
     } catch (e) {
-      this.addLog("Failed to initialize connection.");
+      this.addLog("Erro ao inicializar conexão.");
     }
   }
 

@@ -16,7 +16,6 @@
         body { background-color: #dadbd3; height: 100vh; overflow: hidden; font-family: Segoe UI, Helvetica Neue, Helvetica, Arial, sans-serif; }
         #root { height: 100vh; display: flex; align-items: center; justify-content: center; }
         .whatsapp-bg { background-color: #efeae2; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); opacity: 0.9; }
-        .msg-shadow { box-shadow: 0 1px 0.5px rgba(0,0,0,0.13); }
         @keyframes loading {
           0% { left: -100%; width: 30%; }
           50% { width: 70%; }
@@ -27,27 +26,34 @@
     <script>
         window.process = { env: { API_KEY: "" } };
         window.isConfigLoaded = false;
+        let retryCount = 0;
         
         async function loadConfig() {
-            console.log("Iniciando busca de configurações...");
             const statusEl = document.getElementById('loading-status');
+            retryCount++;
             
             try {
-                const res = await fetch('/api/config', { cache: 'no-store' });
+                if (statusEl) statusEl.innerText = retryCount > 5 ? "O servidor está acordando, por favor aguarde..." : "Conectando ao servidor...";
+                
+                const res = await fetch('/api/config', { 
+                    cache: 'no-store',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
                 if (res.ok) {
                     const config = await res.json();
                     window.process.env.API_KEY = config.API_KEY;
-                    console.log("Configurações carregadas!");
                     window.isConfigLoaded = true;
+                    console.log("Configurações carregadas com sucesso!");
                     window.dispatchEvent(new Event('config-loaded'));
                     return;
                 }
             } catch (e) {
-                console.warn(`Erro ao carregar config:`, e.message);
+                console.warn(`Tentativa ${retryCount} de conexão falhou.`);
             }
             
-            // Se falhar de primeira, tenta em loop mas sem travar a UI
-            setTimeout(loadConfig, 2000);
+            // Tenta novamente em 2 segundos
+            setTimeout(loadConfig, 2500);
         }
         
         window.addEventListener('DOMContentLoaded', loadConfig);
@@ -72,18 +78,25 @@
             <div class="w-64 h-1 bg-gray-200 relative overflow-hidden mb-6 rounded-full">
                <div class="absolute h-full bg-[#922c26] w-1/2" style="animation: loading 2s ease-in-out infinite;"></div>
             </div>
-            <p id="loading-status" class="text-gray-500 font-medium text-center">Conectando ao servidor...</p>
+            <p id="loading-status" class="text-gray-500 font-medium text-center px-6">Iniciando interface...</p>
         </div>
     </div>
     
     <script type="text/babel" data-type="module">
-        const initApp = () => {
-            console.log("Montando aplicação React...");
-            const script = document.createElement('script');
-            script.type = 'text/babel';
-            script.dataset.type = 'module';
-            script.src = 'index.tsx';
-            document.body.appendChild(script);
+        const initApp = async () => {
+            console.log("Iniciando montagem da aplicação...");
+            try {
+                // Importa dinamicamente para garantir que o Babel processe
+                const module = await import('./index.tsx');
+            } catch (err) {
+                console.error("Falha ao carregar index.tsx:", err);
+                // Fallback: Tenta adicionar como script tag se o import falhar
+                const script = document.createElement('script');
+                script.type = 'text/babel';
+                script.dataset.type = 'module';
+                script.src = 'index.tsx';
+                document.body.appendChild(script);
+            }
         };
 
         if (window.isConfigLoaded) {
