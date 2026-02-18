@@ -9,12 +9,12 @@ services:
       - key: NODE_VERSION
         value: 20.12.0
       - key: NODE_OPTIONS
-        value: --max-old-space-size=350
+        value: --max-old-space-size=400
       - key: API_KEY
         sync: false
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
         value: "false"
       - key: PUPPETEER_CACHE_DIR
-        value: "./.puppeteer_cache"
+        value: "/opt/render/project/src/.puppeteer_cache"
       - key: PUPPETEER_EXECUTABLE_PATH
-        value: "./.chrome_stable/chrome"
+        value: "/opt/render/project/src/.chrome_stable/chrome"
