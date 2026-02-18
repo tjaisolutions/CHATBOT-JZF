@@ -29,42 +29,46 @@
         window.isConfigLoaded = false;
         
         async function loadConfig() {
+            console.log("Iniciando busca de configurações...");
             const statusEl = document.getElementById('loading-status');
-            const retries = 40; 
+            const retries = 50; 
             
             for (let i = 0; i < retries; i++) {
                 try {
-                    if (statusEl) statusEl.innerText = `Conectando ao servidor... (${i + 1}/${retries})`;
+                    console.log(`Tentativa ${i+1}...`);
+                    if (statusEl) statusEl.innerText = `Acordando servidor... (${i + 1}/${retries})`;
                     
-                    // Timeout de 5 segundos para o fetch não travar
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 5000);
+                    const timeoutId = setTimeout(() => controller.abort(), 8000);
                     
-                    const res = await fetch('/api/config', { signal: controller.signal });
+                    const res = await fetch('/api/config', { 
+                        signal: controller.signal,
+                        cache: 'no-store'
+                    });
                     clearTimeout(timeoutId);
                     
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    
-                    const config = await res.json();
-                    window.process.env.API_KEY = config.API_KEY;
-                    
-                    console.log("Configurações carregadas com sucesso!");
-                    window.isConfigLoaded = true;
-                    window.dispatchEvent(new Event('config-loaded'));
-                    return;
+                    if (res.ok) {
+                        const config = await res.json();
+                        window.process.env.API_KEY = config.API_KEY;
+                        console.log("Configurações carregadas!");
+                        window.isConfigLoaded = true;
+                        window.dispatchEvent(new Event('config-loaded'));
+                        return;
+                    }
                 } catch (e) {
-                    console.warn(`Tentativa ${i + 1} falhou:`, e.message);
-                    await new Promise(r => setTimeout(r, 3000));
+                    console.warn(`Tentativa ${i+1} falhou:`, e.message);
                 }
+                await new Promise(r => setTimeout(r, 2000));
             }
             
             if (statusEl) {
                 statusEl.innerHTML = `
-                    <div class="text-red-600 font-bold p-6 bg-white rounded shadow-lg max-w-sm">
-                        <p>O servidor demorou muito para responder.</p>
-                        <p class="text-xs font-normal mt-2 text-gray-400">Certifique-se de que o deploy no Render terminou corretamente.</p>
+                    <div class="bg-white p-6 rounded-lg shadow-xl text-center max-w-sm">
+                        <p class="text-gray-800 font-bold mb-2">O servidor está demorando para responder.</p>
+                        <p class="text-xs text-gray-500 mb-4">Isso é comum em contas gratuitas do Render.</p>
+                        <button onclick="window.dispatchEvent(new Event('config-loaded'))" class="w-full bg-[#922c26] text-white py-2 rounded font-bold mb-2">Entrar mesmo assim</button>
+                        <button onclick="location.reload()" class="text-[#922c26] text-xs font-bold uppercase">Tentar reconectar</button>
                     </div>
-                    <button onclick="location.reload()" class="mt-6 px-8 py-3 bg-[#922c26] text-white rounded-full font-bold shadow-md hover:bg-[#7a241f] transition-all">Tentar Novamente</button>
                 `;
             }
         }
@@ -91,13 +95,13 @@
             <div class="w-64 h-1 bg-gray-200 relative overflow-hidden mb-6 rounded-full">
                <div class="absolute h-full bg-[#922c26] w-1/2" style="animation: loading 2s ease-in-out infinite;"></div>
             </div>
-            <p id="loading-status" class="text-gray-500 font-medium text-center">Inicializando interface...</p>
+            <p id="loading-status" class="text-gray-500 font-medium text-center">Iniciando interface...</p>
         </div>
     </div>
     
     <script type="text/babel" data-type="module">
         const initApp = () => {
-            console.log("Iniciando aplicação React...");
+            console.log("Montando aplicação React...");
             const script = document.createElement('script');
             script.type = 'text/babel';
             script.dataset.type = 'module';

@@ -1,6 +1,7 @@
 
 /**
  * BACKEND UNIFICADO - WHATSAPP + GEMINI
+ * Otimizado para ambientes de baixa memória (Render Free - 512MB)
  */
 
 const { Client, LocalAuth } = require('whatsapp-web.js');
@@ -14,22 +15,22 @@ const app = express();
 const port = process.env.PORT || 3001;
 const server = http.createServer(app);
 
-// Middleware de log para depuração no Render
+// Log de requisições simplificado para não poluir o console
 app.use((req, res, next) => {
-    console.log(`[HTTP] ${req.method} ${req.url}`);
+    if (req.url !== '/api/config') console.log(`[HTTP] ${req.method} ${req.url}`);
     next();
 });
 
-// Servir arquivos estáticos
-app.use(express.static(__dirname));
-
-// 1. ENDPOINTS DE SAÚDE E CONFIGURAÇÃO
+// Endpoint de configuração (Prioridade Máxima)
 app.get('/api/config', (req, res) => {
-    console.log('[API] Enviando configurações de API...');
+    res.setHeader('Content-Type', 'application/json');
     res.json({
         API_KEY: process.env.API_KEY || ""
     });
 });
+
+// Servir arquivos estáticos
+app.use(express.static(__dirname));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -37,12 +38,12 @@ app.get('/', (req, res) => {
 
 const wss = new WebSocketServer({ server });
 
-// 2. INICIA O SERVIDOR HTTP IMEDIATAMENTE
+// 2. INICIA O SERVIDOR HTTP
 server.listen(port, "0.0.0.0", () => {
     console.log(`[HTTP] Servidor ONLINE na porta ${port}`);
-    // Delay maior para permitir que o frontend carregue antes do Chrome ocupar a RAM
-    console.log('[WPP] Agendando inicialização do WhatsApp para daqui a 15 segundos...');
-    setTimeout(initWhatsApp, 15000);
+    console.log('[WPP] Aguardando 45 segundos para estabilização de RAM antes de iniciar o Chrome...');
+    // Aumentamos para 45s para garantir que o usuário carregue o site primeiro
+    setTimeout(initWhatsApp, 45000);
 });
 
 function getChromiumExecutablePath() {
@@ -60,19 +61,16 @@ function getChromiumExecutablePath() {
             try {
                 fs.accessSync(p, fs.constants.X_OK);
                 return p;
-            } catch (e) {
-                console.warn(`[DEBUG] Permissão negada em: ${p}`);
-            }
+            } catch (e) {}
         }
     }
     return null;
 }
 
 function initWhatsApp() {
-    console.log('--- [WPP] INICIALIZANDO ENGINE ---');
+    console.log('--- [WPP] INICIALIZANDO ENGINE (MEMÓRIA REDUZIDA) ---');
     
     const chromePath = getChromiumExecutablePath();
-    console.log(`[WPP] Caminho do Chrome: ${chromePath || 'Padrão'}`);
     
     const puppeteerOptions = {
         headless: "new",
@@ -84,10 +82,13 @@ function initWhatsApp() {
             '--no-first-run',
             '--no-zygote',
             '--disable-gpu',
-            '--single-process', // Fundamental para instâncias com pouca RAM
+            '--single-process', 
             '--disable-extensions',
             '--disable-default-apps',
-            '--mute-audio'
+            '--mute-audio',
+            '--disable-software-rasterizer',
+            '--disable-dev-tools',
+            '--js-flags="--max-old-space-size=256"' // Limita memória interna do V8 no Chrome
         ]
     };
 
@@ -95,51 +96,53 @@ function initWhatsApp() {
         puppeteerOptions.executablePath = chromePath;
     }
 
-    const client = new Client({
-        authStrategy: new LocalAuth(),
-        puppeteer: puppeteerOptions
-    });
-
-    wss.on('connection', (ws) => {
-        console.log('[WS] Novo cliente conectado');
-        
-        const sendToFrontend = (type, payload) => {
-            if (ws.readyState === 1) ws.send(JSON.stringify({ type, payload }));
-        };
-
-        client.on('qr', (qr) => {
-            console.log('[WPP] QR Code gerado');
-            sendToFrontend('qr', qr);
+    try {
+        const client = new Client({
+            authStrategy: new LocalAuth(),
+            puppeteer: puppeteerOptions
         });
 
-        client.on('ready', () => {
-            console.log('[WPP] WhatsApp autenticado e pronto!');
-            sendToFrontend('authenticated', true);
-        });
+        wss.on('connection', (ws) => {
+            console.log('[WS] Cliente conectado');
+            
+            const sendToFrontend = (type, payload) => {
+                if (ws.readyState === 1) ws.send(JSON.stringify({ type, payload }));
+            };
 
-        client.on('message', async (msg) => {
-            if (msg.from.includes('@g.us')) return;
-            sendToFrontend('message', {
-                id: msg.id.id,
-                from: msg.from,
-                text: msg.body,
-                timestamp: new Date()
+            client.on('qr', (qr) => {
+                console.log('[WPP] Novo QR Code gerado');
+                sendToFrontend('qr', qr);
+            });
+
+            client.on('ready', () => {
+                console.log('[WPP] Pronto!');
+                sendToFrontend('authenticated', true);
+            });
+
+            client.on('message', async (msg) => {
+                if (msg.from.includes('@g.us')) return;
+                sendToFrontend('message', {
+                    id: msg.id.id,
+                    from: msg.from,
+                    text: msg.body,
+                    timestamp: new Date()
+                });
+            });
+
+            ws.on('message', async (data) => {
+                try {
+                    const { type, payload } = JSON.parse(data);
+                    if (type === 'send_message') {
+                        await client.sendMessage(payload.to, payload.text);
+                    }
+                } catch (e) { console.error('[WS] Erro:', e.message); }
             });
         });
 
-        ws.on('message', async (data) => {
-            try {
-                const { type, payload } = JSON.parse(data);
-                if (type === 'send_message') {
-                    await client.sendMessage(payload.to, payload.text);
-                }
-            } catch (e) { 
-                console.error('[WS] Erro ao enviar:', e.message); 
-            }
+        client.initialize().catch(err => {
+            console.error('[WPP] Erro ao inicializar:', err.message);
         });
-    });
-
-    client.initialize().catch(err => {
-        console.error('[WPP] ERRO CRÍTICO NA ENGINE:', err.message);
-    });
+    } catch (err) {
+        console.error('[WPP] Falha crítica:', err.message);
+    }
 }
