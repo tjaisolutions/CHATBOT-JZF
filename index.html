@@ -21,12 +21,11 @@
 
     <script>
         window.process = { env: { API_KEY: "" } };
+        window.isConfigLoaded = false;
         
         async function loadConfig() {
             const statusEl = document.getElementById('loading-status');
-            const retries = 30; // 30 tentativas * 3s = 90 segundos (Cobre o cold start do Render)
-            
-            console.log("Iniciando carregamento de configuração...");
+            const retries = 40; 
             
             for (let i = 0; i < retries; i++) {
                 try {
@@ -39,18 +38,19 @@
                     window.process.env.API_KEY = config.API_KEY;
                     
                     console.log("Configurações carregadas!");
+                    window.isConfigLoaded = true;
+                    // Dispara o evento E marca a flag global para evitar corrida
                     window.dispatchEvent(new Event('config-loaded'));
                     return;
                 } catch (e) {
-                    console.warn(`Tentativa ${i+1} falhou. Aguardando...`);
                     await new Promise(r => setTimeout(r, 3000));
                 }
             }
             
             if (statusEl) {
                 statusEl.innerHTML = `
-                    <div class="text-red-600 font-bold">Erro: Servidor não responde.</div>
-                    <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-[#922c26] text-white rounded">Tentar Novamente</button>
+                    <div class="text-red-600 font-bold p-4 bg-white rounded shadow">Erro: O servidor demorou muito para responder.</div>
+                    <button onclick="location.reload()" class="mt-4 px-6 py-2 bg-[#922c26] text-white rounded-full font-bold">Tentar Novamente</button>
                 `;
             }
         }
@@ -77,14 +77,22 @@
             <p id="loading-status" class="text-gray-500 font-medium text-center">Inicializando interface...</p>
         </div>
     </div>
+    
+    <!-- Script modificado para lidar com a flag global -->
     <script type="text/babel" data-type="module">
-        window.addEventListener('config-loaded', () => {
+        const initApp = () => {
             const script = document.createElement('script');
             script.type = 'text/babel';
             script.dataset.type = 'module';
             script.src = 'index.tsx';
             document.body.appendChild(script);
-        });
+        };
+
+        if (window.isConfigLoaded) {
+            initApp();
+        } else {
+            window.addEventListener('config-loaded', initApp);
+        }
     </script>
 </body>
 </html>

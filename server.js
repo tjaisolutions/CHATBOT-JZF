@@ -1,3 +1,4 @@
+
 /**
  * BACKEND UNIFICADO - WHATSAPP + GEMINI
  */
@@ -13,27 +14,28 @@ const app = express();
 const port = process.env.PORT || 3001;
 const server = http.createServer(app);
 
-// 1. ENDPOINTS DE SAÚDE E CONFIGURAÇÃO
-// O Render precisa que o '/' responda rápido para não dar timeout
-app.get('/', (req, res) => {
-    res.send('WhatsApp Bot Engine is Running');
-});
+// Servir arquivos estáticos (colocado antes das rotas para evitar conflitos)
+app.use(express.static(__dirname));
 
+// 1. ENDPOINTS DE SAÚDE E CONFIGURAÇÃO
 app.get('/api/config', (req, res) => {
     res.json({
         API_KEY: process.env.API_KEY || ""
     });
 });
 
-app.use(express.static(__dirname));
+// Endpoint principal explicitamente servindo index.html se nada mais bater
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 const wss = new WebSocketServer({ server });
 
 // 2. INICIA O SERVIDOR HTTP IMEDIATAMENTE
 server.listen(port, "0.0.0.0", () => {
-    console.log(`[HTTP] Servidor rodando na porta ${port}`);
-    // Inicializa o WhatsApp em background para não bloquear o boot do servidor
-    setTimeout(initWhatsApp, 1000);
+    console.log(`[HTTP] Servidor ONLINE na porta ${port}`);
+    // Inicializa o WhatsApp em background
+    setTimeout(initWhatsApp, 2000);
 });
 
 function getChromiumExecutablePath() {
@@ -56,8 +58,8 @@ function initWhatsApp() {
     console.log('--- [WPP] INICIALIZANDO ENGINE ---');
     
     const chromePath = getChromiumExecutablePath();
+    console.log(`[WPP] Usando executável do Chrome: ${chromePath || 'Padrão'}`);
     
-    // Flags cruciais para rodar em ambientes com pouca RAM (Render Free)
     const puppeteerOptions = {
         headless: "new",
         args: [
@@ -68,14 +70,15 @@ function initWhatsApp() {
             '--no-first-run',
             '--no-zygote',
             '--disable-gpu',
-            '--single-process', // Reduz drasticamente o uso de RAM
-            '--disable-extensions'
+            '--single-process', // Crucial para o Render Free
+            '--disable-extensions',
+            '--disable-default-apps',
+            '--mute-audio'
         ]
     };
 
     if (chromePath) {
         puppeteerOptions.executablePath = chromePath;
-        console.log(`[WPP] Executável: ${chromePath}`);
     }
 
     const client = new Client({
@@ -84,7 +87,7 @@ function initWhatsApp() {
     });
 
     wss.on('connection', (ws) => {
-        console.log('[WS] Cliente UI conectado');
+        console.log('[WS] Novo cliente conectado');
         
         const sendToFrontend = (type, payload) => {
             if (ws.readyState === 1) ws.send(JSON.stringify({ type, payload }));
@@ -96,7 +99,7 @@ function initWhatsApp() {
         });
 
         client.on('ready', () => {
-            console.log('[WPP] WhatsApp pronto!');
+            console.log('[WPP] WhatsApp autenticado e pronto!');
             sendToFrontend('authenticated', true);
         });
 
@@ -117,12 +120,12 @@ function initWhatsApp() {
                     await client.sendMessage(payload.to, payload.text);
                 }
             } catch (e) { 
-                console.error('[WS] Erro:', e.message); 
+                console.error('[WS] Erro ao enviar:', e.message); 
             }
         });
     });
 
     client.initialize().catch(err => {
-        console.error('[WPP] FALHA NA INICIALIZAÇÃO:', err.message);
+        console.error('[WPP] ERRO FATAL NA ENGINE:', err.message);
     });
 }
